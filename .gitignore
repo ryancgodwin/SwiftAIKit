@@ -1,0 +1,14 @@
+.DS_Store
+.claude/settings.local.json
+.build/
+.swiftpm/
+Packages/
+xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
