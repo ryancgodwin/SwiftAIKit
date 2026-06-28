@@ -28,7 +28,7 @@ public struct BYOKConfiguration: Sendable {
         endpointDefaultsKey: String = "anthropicEndpoint",
         modelDefaultsKey: String = "anthropicModel",
         defaultEndpoint: String = "https://api.anthropic.com",
-        defaultModel: String = "claude-sonnet-4-20250514"
+        defaultModel: String = "claude-sonnet-4-6"
     ) {
         self.providerDefaultsKey = providerDefaultsKey
         self.apiKeyAccount = apiKeyAccount
