@@ -12,3 +12,4 @@ DerivedData/
 *.ipa
 *.dSYM.zip
 *.dSYM
+.superpowers/

@@ -13,6 +13,10 @@ let package = Package(
             name: "SwiftAIKit",
             targets: ["SwiftAIKit"]
         ),
+        .library(
+            name: "SwiftAIKitUI",
+            targets: ["SwiftAIKitUI"]
+        ),
     ],
     targets: [
         .target(
@@ -22,10 +26,23 @@ let package = Package(
                 .swiftLanguageMode(.v6),
             ]
         ),
+        .target(
+            name: "SwiftAIKitUI",
+            dependencies: ["SwiftAIKit"],
+            path: "Sources/SwiftAIKitUI",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
         .testTarget(
             name: "SwiftAIKitTests",
             dependencies: ["SwiftAIKit"],
             path: "Tests/SwiftAIKitTests"
+        ),
+        .testTarget(
+            name: "SwiftAIKitUITests",
+            dependencies: ["SwiftAIKitUI"],
+            path: "Tests/SwiftAIKitUITests"
         ),
     ]
 )
