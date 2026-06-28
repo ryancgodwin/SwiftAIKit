@@ -50,7 +50,7 @@ public enum ProviderConfigurator {
         let anthropicEndpoint = UserDefaults.standard.string(forKey: anthropicEndpointDefault)
             .flatMap { $0.isEmpty ? nil : $0 } ?? "https://api.anthropic.com"
         let anthropicModel = UserDefaults.standard.string(forKey: anthropicModelDefault)
-            .flatMap { $0.isEmpty ? nil : $0 } ?? "claude-sonnet-4-20250514"
+            .flatMap { $0.isEmpty ? nil : $0 } ?? "claude-sonnet-4-6"
 
         router.configure(.anthropic, with: AnthropicProvider(
             configuration: .init(
@@ -86,7 +86,7 @@ public enum ProviderConfigurator {
         router: AIServiceRouter,
         apiKey: String,
         endpoint: String = "https://api.anthropic.com",
-        model: String = "claude-sonnet-4-20250514",
+        model: String = "claude-sonnet-4-6",
         session: URLSession = .shared
     ) {
         router.configure(.anthropic, with: AnthropicProvider(

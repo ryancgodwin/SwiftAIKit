@@ -29,7 +29,7 @@ public actor AnthropicProvider: AIServiceProtocol {
         public init(
             apiKey: String,
             endpoint: String = "https://api.anthropic.com",
-            model: String = "claude-sonnet-4-20250514",
+            model: String = "claude-sonnet-4-6",
             apiVersion: String = "2023-06-01"
         ) {
             self.apiKey = apiKey
