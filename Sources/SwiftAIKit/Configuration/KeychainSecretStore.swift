@@ -21,11 +21,14 @@ public final class KeychainSecretStore: SecretStore {
 
     /// - Parameter service: the Keychain service identifier, typically the app
     ///   bundle id (e.g. `"com.blazepascal.CareerPilot"`).
+
+    // MARK: - Init
     public init(service: String) {
         self.service = service
         self.logger = Logger(subsystem: service, category: "Keychain")
     }
 
+    // MARK: - SecretStore
     public func string(forKey key: String) -> String? {
         if let cached = cache[key] { return cached }
         return readThroughCache(forKey: key)
@@ -35,6 +38,7 @@ public final class KeychainSecretStore: SecretStore {
         readThroughCache(forKey: key)
     }
 
+    // MARK: - Private
     private func readThroughCache(forKey key: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -63,7 +67,6 @@ public final class KeychainSecretStore: SecretStore {
             return
         }
         guard let data = value.data(using: .utf8) else { return }
-        cache[key] = value
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -79,7 +82,9 @@ public final class KeychainSecretStore: SecretStore {
             add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
             status = SecItemAdd(add as CFDictionary, nil)
         }
-        if status != errSecSuccess {
+        if status == errSecSuccess {
+            cache[key] = value
+        } else {
             logger.error("Keychain write failed for \(key, privacy: .public): \(status)")
         }
     }
