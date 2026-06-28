@@ -95,6 +95,27 @@ public enum ProviderConfigurator {
         ))
     }
 
+    /// Configure the Anthropic provider, reading the API key from a `SecretStore`
+    /// (the secure path) and the endpoint/model overrides from UserDefaults.
+    @MainActor
+    public static func configureAnthropic(
+        router: AIServiceRouter,
+        secretStore: SecretStore,
+        config: BYOKConfiguration = .default,
+        session: URLSession = .shared
+    ) {
+        let key = secretStore.string(forKey: config.apiKeyAccount) ?? ""
+        let endpoint = UserDefaults.standard.string(forKey: config.endpointDefaultsKey) ?? ""
+        let model = UserDefaults.standard.string(forKey: config.modelDefaultsKey) ?? ""
+        configureAnthropic(
+            router: router,
+            apiKey: key,
+            endpoint: endpoint.isEmpty ? config.defaultEndpoint : endpoint,
+            model: model.isEmpty ? config.defaultModel : model,
+            session: session
+        )
+    }
+
     /// Configure just the OpenAI-compatible provider.
     @MainActor
     public static func configureOpenAI(
