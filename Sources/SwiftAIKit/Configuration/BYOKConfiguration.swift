@@ -1,5 +1,3 @@
-import Foundation
-
 /// Names and defaults for a bring-your-own-key Anthropic setup. Shared by
 /// `ProviderReadinessChecker` and the `SwiftAIKitUI` settings view so key
 /// strings and defaults are defined exactly once.

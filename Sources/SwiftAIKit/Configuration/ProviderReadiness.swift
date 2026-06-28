@@ -62,9 +62,11 @@ public enum ProviderReadinessChecker {
             return checkOnDeviceAvailability()
 
         case .openAI:
-            // Not surfaced in v1 pickers; treat like Anthropic for gating.
-            let key = secretStore.string(forKey: config.apiKeyAccount) ?? ""
-            return key.isEmpty ? .needsAnthropicKey : .ready
+            // OpenAI is not surfaced in any v1 picker, and BYOKConfiguration models
+            // only the Anthropic key — so OpenAI can never be evaluated as ready
+            // here. Return a not-ready state WITHOUT reading any key, so an
+            // unrelated Anthropic key can't make OpenAI appear configured.
+            return .needsAnthropicKey
         }
     }
 

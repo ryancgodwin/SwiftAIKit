@@ -1,5 +1,3 @@
-import Foundation
-
 /// Abstraction over secret storage (e.g. provider API keys).
 ///
 /// Production uses `KeychainSecretStore`; tests use `InMemorySecretStore`.

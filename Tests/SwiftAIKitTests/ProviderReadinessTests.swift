@@ -37,4 +37,14 @@ struct ProviderReadinessTests {
     func readyMessageEmpty() {
         #expect(ProviderReadiness.ready.userFacingMessage.isEmpty)
     }
+
+    @Test("openAI active with an anthropic key set is not falsely ready")
+    func openAINotFalselyReady() {
+        let router = AIServiceRouter(defaultProvider: .openAI, defaultsKey: "test_provider_openai")
+        router.activeProviderType = .openAI
+        let store = InMemorySecretStore()
+        store.set("sk-ant-xyz", forKey: BYOKConfiguration.default.apiKeyAccount)
+        let readiness = ProviderReadinessChecker.check(router: router, secretStore: store, config: .default)
+        #expect(readiness.isReady == false)
+    }
 }

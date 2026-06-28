@@ -38,4 +38,16 @@ struct AIProviderSettingsModelTests {
         #expect(model.apiKey == "sk-ant-stored")
         #expect(model.isKeyUnlocked)
     }
+
+    @Test("editing endpoint while the key field is locked preserves the stored key")
+    func endpointEditPreservesStoredKey() async {
+        let (model, store, router) = makeModel()
+        store.set("sk-ant-stored", forKey: BYOKConfiguration.default.apiKeyAccount)
+        model.provider = .anthropic
+        // User edits endpoint WITHOUT unlocking (apiKey mirror is empty).
+        model.endpoint = "https://proxy.example.com"
+        // The Anthropic provider must still be configured (key sourced from the store).
+        let available = await router.isProviderAvailable(.anthropic)
+        #expect(available)
+    }
 }

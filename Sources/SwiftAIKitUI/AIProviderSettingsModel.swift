@@ -73,13 +73,16 @@ public final class AIProviderSettingsModel {
         reconfigure()
     }
 
-    /// Re-register the Anthropic provider on the router with current values.
+    /// Re-register the Anthropic provider on the router using the stored key and
+    /// the current endpoint/model overrides. The key is read from the secret
+    /// store (not the in-memory `apiKey` mirror, which is empty while the field
+    /// is locked) so that editing endpoint/model never clobbers a stored key
+    /// with an empty value.
     public func reconfigure() {
         ProviderConfigurator.configureAnthropic(
             router: router,
-            apiKey: apiKey,
-            endpoint: endpoint.isEmpty ? config.defaultEndpoint : endpoint,
-            model: model.isEmpty ? config.defaultModel : model
+            secretStore: secretStore,
+            config: config
         )
     }
 }
