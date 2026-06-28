@@ -14,9 +14,6 @@ let package = Package(
             targets: ["SwiftAIKit"]
         ),
     ],
-    dependencies: [
-        .package(url: "https://github.com/apple/swift-testing.git", from: "0.0.0"),
-    ],
     targets: [
         .target(
             name: "SwiftAIKit",
@@ -27,10 +24,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SwiftAIKitTests",
-            dependencies: [
-                "SwiftAIKit",
-                .product(name: "Testing", package: "swift-testing"),
-            ],
+            dependencies: ["SwiftAIKit"],
             path: "Tests/SwiftAIKitTests"
         ),
     ]
