@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
 
 /// Routes AI requests to the active provider.
 ///
@@ -151,6 +154,27 @@ public final class AIServiceRouter {
             return false
         }
     }
+
+    // MARK: - Guided Generation Accessor
+
+    #if canImport(FoundationModels)
+    /// The active provider if it supports guided generation (on-device Apple Intelligence).
+    ///
+    /// Returns non-nil only when `activeProvider` conforms to `GuidedGenerating`
+    /// (currently only `OnDeviceProvider` on macOS 26+).
+    ///
+    /// Usage:
+    /// ```swift
+    /// if #available(macOS 26.0, iOS 26.0, *),
+    ///    let guided = router.activeGuidedProvider {
+    ///     let result = try await guided.respondGuided(...)
+    /// }
+    /// ```
+    @available(macOS 26.0, iOS 26.0, *)
+    public var activeGuidedProvider: (any GuidedGenerating)? {
+        activeProvider as? any GuidedGenerating
+    }
+    #endif
 
     /// Send a completion request to a specific provider (regardless of active selection).
     ///
