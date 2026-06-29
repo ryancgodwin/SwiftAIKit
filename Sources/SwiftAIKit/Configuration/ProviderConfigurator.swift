@@ -97,6 +97,14 @@ public enum ProviderConfigurator {
 
     /// Configure the Anthropic provider, reading the API key from a `SecretStore`
     /// (the secure path) and the endpoint/model overrides from UserDefaults.
+    ///
+    /// The API key is loaded **lazily** — it is NOT read from the store here.
+    /// Instead, a `@Sendable` closure capturing the store is handed to
+    /// `AnthropicProvider.Configuration.apiKeyResolver`. The key is read only
+    /// when `AnthropicProvider.complete()` is actually called, so macOS will
+    /// not show a Keychain password prompt at app launch when the user is only
+    /// using on-device AI. Endpoint and model may still be read from
+    /// `UserDefaults` at configure time (those do not trigger any OS prompt).
     @MainActor
     public static func configureAnthropic(
         router: AIServiceRouter,
@@ -104,16 +112,19 @@ public enum ProviderConfigurator {
         config: BYOKConfiguration = .default,
         session: URLSession = .shared
     ) {
-        let key = secretStore.string(forKey: config.apiKeyAccount) ?? ""
         let endpoint = UserDefaults.standard.string(forKey: config.endpointDefaultsKey) ?? ""
         let model = UserDefaults.standard.string(forKey: config.modelDefaultsKey) ?? ""
-        configureAnthropic(
-            router: router,
-            apiKey: key,
+        let configuration = AnthropicProvider.Configuration(
+            apiKey: "",
             endpoint: endpoint.isEmpty ? config.defaultEndpoint : endpoint,
             model: model.isEmpty ? config.defaultModel : model,
-            session: session
+            // Lazy resolver: Keychain is read only when a request is made.
+            apiKeyResolver: { [secretStore] in secretStore.string(forKey: config.apiKeyAccount) }
         )
+        router.configure(.anthropic, with: AnthropicProvider(
+            configuration: configuration,
+            session: session
+        ))
     }
 
     /// Configure just the OpenAI-compatible provider.

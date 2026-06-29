@@ -26,16 +26,27 @@ public actor AnthropicProvider: AIServiceProtocol {
         public let model: String
         public let apiVersion: String
 
+        /// Optional lazy key resolver. When set, `complete()` calls this closure
+        /// at request time to obtain the API key instead of reading `apiKey`
+        /// directly. This avoids triggering a Keychain password prompt at app
+        /// launch — the prompt fires only when the user actually makes a Claude
+        /// request. If the resolver returns `nil`, `apiKey` is used as fallback.
+        ///
+        /// The closure must be `@Sendable` because it is stored inside an actor.
+        public let apiKeyResolver: (@Sendable () -> String?)?
+
         public init(
             apiKey: String,
             endpoint: String = "https://api.anthropic.com",
             model: String = "claude-sonnet-4-6",
-            apiVersion: String = "2023-06-01"
+            apiVersion: String = "2023-06-01",
+            apiKeyResolver: (@Sendable () -> String?)? = nil
         ) {
             self.apiKey = apiKey
             self.endpoint = endpoint
             self.model = model
             self.apiVersion = apiVersion
+            self.apiKeyResolver = apiKeyResolver
         }
     }
 
@@ -45,8 +56,16 @@ public actor AnthropicProvider: AIServiceProtocol {
     private let configuration: Configuration
     private let session: URLSession
 
+    /// Returns `true` when the provider is configured with a way to supply a
+    /// key — either a non-empty static `apiKey` or a `apiKeyResolver` closure.
+    ///
+    /// IMPORTANT: This property intentionally does NOT call `apiKeyResolver`.
+    /// Invoking the resolver here would read the Keychain on every availability
+    /// check (e.g. from UI code, readiness checks), defeating the entire purpose
+    /// of lazy loading and reintroducing the unwanted launch-time Keychain prompt.
+    /// Actual key presence is validated at request time inside `complete()`.
     public var isAvailable: Bool {
-        !configuration.apiKey.isEmpty
+        configuration.apiKeyResolver != nil || !configuration.apiKey.isEmpty
     }
 
     // MARK: - Init
@@ -63,7 +82,10 @@ public actor AnthropicProvider: AIServiceProtocol {
         systemPrompt: String?,
         maxTokens: Int
     ) async throws -> AIResponse {
-        guard isAvailable else {
+        // Resolve the key lazily at request time. The resolver captures a
+        // Sendable SecretStore and reads it only now — not at configure time.
+        let apiKey = configuration.apiKeyResolver?() ?? configuration.apiKey
+        guard !apiKey.isEmpty else {
             throw AIError.notConfigured("No Anthropic API key configured.")
         }
 
@@ -71,7 +93,7 @@ public actor AnthropicProvider: AIServiceProtocol {
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue(configuration.apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
         request.setValue(configuration.apiVersion, forHTTPHeaderField: "anthropic-version")
         request.setValue("application/json", forHTTPHeaderField: "content-type")
 

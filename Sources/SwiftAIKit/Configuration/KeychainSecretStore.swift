@@ -8,29 +8,40 @@ import os
 /// Reads are cached for the lifetime of the launch: on the legacy file-based
 /// keychain, every `SecItem` call against an item whose ACL doesn't trust the
 /// current binary (routine in development, where each rebuild is ad-hoc signed)
-/// raises a password prompt — the cache caps that at one prompt per launch.
-@MainActor
-public final class KeychainSecretStore: SecretStore {
+/// raises a password prompt — the cache caps that at one prompt per key per launch.
+///
+/// Thread-safety: `cache` is guarded by `NSLock`, and the underlying Security
+/// framework Keychain C APIs are themselves thread-safe. Therefore this type is
+/// declared `@unchecked Sendable` — the lock makes all mutable-state access
+/// atomic, satisfying Swift's Sendable contract without actor isolation.
+public final class KeychainSecretStore: SecretStore, @unchecked Sendable {
 
     private let service: String
     private let logger: Logger
 
     /// Per-launch cache. The inner optional distinguishes "cached: no item"
-    /// from "not yet read".
+    /// from "not yet read". Guarded by `lock`.
+    private let lock = NSLock()
     private var cache: [String: String?] = [:]
+
+    // MARK: - Init
 
     /// - Parameter service: the Keychain service identifier, typically the app
     ///   bundle id (e.g. `"com.blazepascal.CareerPilot"`).
-
-    // MARK: - Init
     public init(service: String) {
         self.service = service
         self.logger = Logger(subsystem: service, category: "Keychain")
     }
 
     // MARK: - SecretStore
+
     public func string(forKey key: String) -> String? {
-        if let cached = cache[key] { return cached }
+        // Check the cache first without hitting the Keychain.
+        let cached: String?? = lock.withLock { cache[key] }
+        if let cached {
+            // cache[key] exists (inner value may be nil = "confirmed absent").
+            return cached
+        }
         return readThroughCache(forKey: key)
     }
 
@@ -39,6 +50,7 @@ public final class KeychainSecretStore: SecretStore {
     }
 
     // MARK: - Private
+
     private func readThroughCache(forKey key: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -53,11 +65,11 @@ public final class KeychainSecretStore: SecretStore {
             if status != errSecItemNotFound {
                 logger.error("Keychain read failed for \(key, privacy: .public): \(status)")
             }
-            cache[key] = String?.none
+            lock.withLock { cache[key] = String?.none }
             return nil
         }
         let value = String(data: data, encoding: .utf8)
-        cache[key] = value
+        lock.withLock { cache[key] = value }
         return value
     }
 
@@ -83,14 +95,14 @@ public final class KeychainSecretStore: SecretStore {
             status = SecItemAdd(add as CFDictionary, nil)
         }
         if status == errSecSuccess {
-            cache[key] = value
+            lock.withLock { cache[key] = value }
         } else {
             logger.error("Keychain write failed for \(key, privacy: .public): \(status)")
         }
     }
 
     public func removeValue(forKey key: String) {
-        cache[key] = String?.none
+        lock.withLock { cache[key] = .none }
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
