@@ -147,3 +147,38 @@ public actor OnDeviceProvider: AIServiceProtocol {
     }
     #endif
 }
+
+// MARK: - GuidedGenerating Conformance
+
+#if canImport(FoundationModels)
+@available(macOS 26.0, iOS 26.0, *)
+extension OnDeviceProvider: GuidedGenerating {
+
+    public func respondGuided<Content: Generable & Sendable>(
+        to prompt: String,
+        systemPrompt: String?,
+        maxTokens: Int,
+        generating: Content.Type
+    ) async throws -> Content {
+        let model = SystemLanguageModel.default
+        guard case .available = model.availability else {
+            throw AIError.providerUnavailable(availabilityReason(model.availability))
+        }
+        let session = LanguageModelSession(instructions: systemPrompt ?? "")
+        do {
+            let response = try await session.respond(
+                to: prompt,
+                generating: Content.self,
+                options: Self.generationOptions(maxTokens: maxTokens)
+            )
+            return response.content
+        } catch let error as LanguageModelSession.GenerationError {
+            throw AIError.requestFailed("On-device guided generation failed: \(error.localizedDescription)")
+        } catch let error as AIError {
+            throw error
+        } catch {
+            throw AIError.requestFailed(error.localizedDescription)
+        }
+    }
+}
+#endif
