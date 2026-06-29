@@ -91,6 +91,9 @@ public actor OnDeviceProvider: AIServiceProtocol {
         return false
     }
 
+    /// Builds on-device generation options. `maxTokens <= 0` means "no explicit
+    /// cap" (the model's own default limit applies); a positive value is passed
+    /// through as `maximumResponseTokens`.
     @available(macOS 26.0, iOS 26.0, *)
     static func generationOptions(maxTokens: Int) -> GenerationOptions {
         GenerationOptions(maximumResponseTokens: maxTokens > 0 ? maxTokens : nil)

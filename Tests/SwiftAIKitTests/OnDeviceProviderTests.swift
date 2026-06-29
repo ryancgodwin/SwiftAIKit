@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import SwiftAIKit
 
@@ -26,7 +27,6 @@ struct OnDeviceProviderPromptTests {
     }
 }
 
-import Foundation
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
@@ -52,6 +52,7 @@ struct OnDeviceProviderLiveTests {
             maxTokens: 32
         )
         #expect(!response.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        #expect(response.content.localizedCaseInsensitiveContains("pong"))
         #expect(response.model == "apple-intelligence-on-device")
         print("LIVE on-device response: \(response.content)")
         #else
