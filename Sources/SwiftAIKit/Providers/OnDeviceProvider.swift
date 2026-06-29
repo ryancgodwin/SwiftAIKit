@@ -27,6 +27,24 @@ public actor OnDeviceProvider: AIServiceProtocol {
 
     public let providerType: AIProviderType = .onDevice
 
+    // MARK: - Prompt building (pure, testable on any OS)
+
+    /// A single user turn is sent verbatim (the common case); multi-message
+    /// histories are role-labeled. Kept pure so it is unit-testable without
+    /// the on-device model.
+    static func buildPrompt(from messages: [AIMessage]) -> String {
+        if messages.count == 1, messages[0].role == .user {
+            return messages[0].content
+        }
+        return messages.map { msg in
+            switch msg.role {
+            case .system:    return "System: \(msg.content)"
+            case .user:      return "User: \(msg.content)"
+            case .assistant: return "Assistant: \(msg.content)"
+            }
+        }.joined(separator: "\n")
+    }
+
     public var isAvailable: Bool {
         #if canImport(FoundationModels)
         if #available(macOS 26.0, iOS 26.0, *) {
@@ -51,7 +69,8 @@ public actor OnDeviceProvider: AIServiceProtocol {
         if #available(macOS 26.0, iOS 26.0, *) {
             return try await completeWithFoundationModels(
                 messages: messages,
-                systemPrompt: systemPrompt
+                systemPrompt: systemPrompt,
+                maxTokens: maxTokens
             )
         }
         #endif
@@ -73,40 +92,38 @@ public actor OnDeviceProvider: AIServiceProtocol {
     }
 
     @available(macOS 26.0, iOS 26.0, *)
+    static func generationOptions(maxTokens: Int) -> GenerationOptions {
+        GenerationOptions(maximumResponseTokens: maxTokens > 0 ? maxTokens : nil)
+    }
+
+    @available(macOS 26.0, iOS 26.0, *)
     private func completeWithFoundationModels(
         messages: [AIMessage],
-        systemPrompt: String?
+        systemPrompt: String?,
+        maxTokens: Int
     ) async throws -> AIResponse {
         let model = SystemLanguageModel.default
         guard case .available = model.availability else {
             throw AIError.providerUnavailable(availabilityReason(model.availability))
         }
 
-        let instructions = systemPrompt ?? ""
-        let session = LanguageModelSession(instructions: instructions)
-
-        // Build a single prompt from the conversation messages.
-        // FoundationModels uses a session-based API, so we concatenate the
-        // conversation into a single input for the respond() call.
-        let conversationText = messages.map { msg in
-            switch msg.role {
-            case .system:
-                return "System: \(msg.content)"
-            case .user:
-                return "User: \(msg.content)"
-            case .assistant:
-                return "Assistant: \(msg.content)"
-            }
-        }.joined(separator: "\n")
+        let session = LanguageModelSession(instructions: systemPrompt ?? "")
+        let prompt = Self.buildPrompt(from: messages)
 
         do {
-            let response = try await session.respond(to: conversationText)
+            let response = try await session.respond(to: prompt, options: Self.generationOptions(maxTokens: maxTokens))
+            let content = response.content
+            guard !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw AIError.requestFailed("On-device model returned an empty response.")
+            }
             return AIResponse(
-                content: response.content,
+                content: content,
                 usage: nil,
                 model: "apple-intelligence-on-device",
                 finishReason: .stop
             )
+        } catch let error as AIError {
+            throw error
         } catch {
             throw AIError.requestFailed(error.localizedDescription)
         }
