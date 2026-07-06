@@ -190,6 +190,36 @@ struct GeminiResponseParsingTests {
         #expect(GeminiImageProvider.mapAspectRatio(.custom(w: 4, h: 3)) == "4:3")
     }
 
+    /// The full set of `ImageConfig.aspectRatio` strings this provider is allowed to emit, per
+    /// the live Discovery document (mirrors `mapAspectRatio`'s doc comment). Any `.custom` ratio
+    /// must snap to one of these — never emit an unsupported wire value.
+    static let supportedAspectRatioStrings: Set<String> = [
+        "1:1", "1:4", "4:1", "1:8", "8:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16",
+        "16:9", "21:9",
+    ]
+
+    @Test("custom aspect ratios always snap to a supported wire value")
+    func customAspectRatioAlwaysSupported() {
+        let result = GeminiImageProvider.mapAspectRatio(.custom(w: 1200, h: 630))
+        #expect(Self.supportedAspectRatioStrings.contains(result))
+    }
+
+    @Test("custom(1200, 630) snaps to the nearest supported ratio (16:9)")
+    func customAspectRatioNearestMatch() {
+        // 1200/630 ≈ 1.905 — nearest supported ratio is 16:9 (≈1.778), not 21:9 (≈2.333).
+        #expect(GeminiImageProvider.mapAspectRatio(.custom(w: 1200, h: 630)) == "16:9")
+    }
+
+    @Test("an extreme custom aspect ratio snaps to the widest supported ratio (8:1)")
+    func customAspectRatioExtremeWide() {
+        #expect(GeminiImageProvider.mapAspectRatio(.custom(w: 100, h: 1)) == "8:1")
+    }
+
+    @Test("custom(4, 3) keeps its exact match (4:3 is itself supported)")
+    func customAspectRatioExactMatchStaysExact() {
+        #expect(GeminiImageProvider.mapAspectRatio(.custom(w: 4, h: 3)) == "4:3")
+    }
+
     @Test("maps ImageSize to the documented ImageConfig.imageSize buckets")
     func mapsImageSize() {
         #expect(GeminiImageProvider.mapImageSize(ImageSize(width: 1024, height: 1024)) == "1K")

@@ -141,6 +141,60 @@ struct ImageServiceRouterTests {
         #expect(await fallback.generateCallCount == 0)
     }
 
+    @Test("""
+    generate() continues past a fallback candidate that is registered, available, but throws \
+    a fallback-eligible error, and returns the result from the next candidate in the chain
+    """)
+    func fallbackChainSkipsThrowingCandidateAndReachesTerminal() async throws {
+        let router = ImageServiceRouter(defaultProvider: .geminiNanoBanana, defaultsKey: uniqueDefaultsKey())
+        let active = StubImageProvider(providerType: .geminiNanoBanana, isAvailable: false)
+        let throwingFallback = StubImageProvider(
+            providerType: .openAIImage,
+            isAvailable: true,
+            error: .notConfigured("no OpenAI key")
+        )
+        let terminalResult = ImageResult(data: Data([0x06]), mimeType: "image/svg+xml", provider: .svgFallback)
+        let terminal = StubImageProvider(providerType: .svgFallback, isAvailable: true, result: terminalResult)
+
+        router.configure(.geminiNanoBanana, with: active)
+        router.configure(.openAIImage, with: throwingFallback)
+        router.configure(.svgFallback, with: terminal)
+        router.fallbackOrder = [.geminiNanoBanana, .openAIImage, .svgFallback]
+
+        let result = try await router.generate(ImageRequest(prompt: "a red panda"))
+
+        #expect(result.provider == .svgFallback)
+        #expect(result.data == terminalResult.data)
+        #expect(await throwingFallback.generateCallCount == 1)
+        #expect(await terminal.generateCallCount == 1)
+    }
+
+    @Test("""
+    generate() propagates a non-fallback-eligible error thrown by a middle fallback candidate \
+    immediately, without trying later candidates in the chain
+    """)
+    func fallbackChainPropagatesNonEligibleErrorImmediately() async throws {
+        let router = ImageServiceRouter(defaultProvider: .geminiNanoBanana, defaultsKey: uniqueDefaultsKey())
+        let active = StubImageProvider(providerType: .geminiNanoBanana, isAvailable: false)
+        let throwingFallback = StubImageProvider(
+            providerType: .openAIImage,
+            isAvailable: true,
+            error: .requestFailed("network error")
+        )
+        let terminal = StubImageProvider(providerType: .svgFallback, isAvailable: true)
+
+        router.configure(.geminiNanoBanana, with: active)
+        router.configure(.openAIImage, with: throwingFallback)
+        router.configure(.svgFallback, with: terminal)
+        router.fallbackOrder = [.geminiNanoBanana, .openAIImage, .svgFallback]
+
+        await #expect(throws: AIError.self) {
+            try await router.generate(ImageRequest(prompt: "a red panda"))
+        }
+        #expect(await throwingFallback.generateCallCount == 1)
+        #expect(await terminal.generateCallCount == 0)
+    }
+
     @Test("generate() rethrows the original error when no fallback succeeds")
     func rethrowsWhenNoFallbackSucceeds() async throws {
         let router = ImageServiceRouter(defaultProvider: .geminiNanoBanana, defaultsKey: uniqueDefaultsKey())

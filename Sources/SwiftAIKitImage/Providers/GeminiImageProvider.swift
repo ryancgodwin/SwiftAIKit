@@ -156,9 +156,40 @@ public actor GeminiImageProvider: ImageServiceProtocol {
         return try JSONSerialization.data(withJSONObject: body)
     }
 
+    /// The complete set of `ImageConfig.aspectRatio` values Gemini's `generateContent` endpoint
+    /// accepts, per the live Discovery document's `ImageConfig` schema. Any wire value emitted by
+    /// `mapAspectRatio(_:)` MUST come from this list — sending anything else yields an HTTP 400
+    /// `INVALID_ARGUMENT`, which surfaces as `AIError.requestFailed` and does NOT trigger router
+    /// fallback (see `ImageServiceRouter.shouldFallback(for:)`), so an unsupported ratio is a
+    /// deterministic, unrecoverable failure for the caller.
+    private static let supportedAspectRatios: [(string: String, value: Double)] = [
+        ("1:1", 1.0 / 1.0),
+        ("1:4", 1.0 / 4.0),
+        ("4:1", 4.0 / 1.0),
+        ("1:8", 1.0 / 8.0),
+        ("8:1", 8.0 / 1.0),
+        ("2:3", 2.0 / 3.0),
+        ("3:2", 3.0 / 2.0),
+        ("3:4", 3.0 / 4.0),
+        ("4:3", 4.0 / 3.0),
+        ("4:5", 4.0 / 5.0),
+        ("5:4", 5.0 / 4.0),
+        ("9:16", 9.0 / 16.0),
+        ("16:9", 16.0 / 9.0),
+        ("21:9", 21.0 / 9.0),
+    ]
+
     /// Maps `AspectRatio` to one of the Gemini `ImageConfig.aspectRatio` supported values:
     /// `1:1`, `1:4`, `4:1`, `1:8`, `8:1`, `2:3`, `3:2`, `3:4`, `4:3`, `4:5`, `5:4`, `9:16`,
     /// `16:9`, `21:9` (per the live Discovery document's `ImageConfig` schema).
+    ///
+    /// `.custom(w, h)` is NOT sent verbatim — a gcd-reduced ratio like `1200:630` ("40:21") is
+    /// not among the supported strings above and Gemini would reject it with HTTP 400
+    /// `INVALID_ARGUMENT`. Instead, `.custom` snaps to the **nearest** supported ratio by
+    /// comparing `w/h` (as `Double`) against each supported ratio's value and picking the
+    /// closest — mirroring `OpenAIImageProvider.mapSize`'s degrade-don't-fail philosophy (that
+    /// provider falls back to `"auto"` rather than failing on an unmappable custom aspect).
+    /// Exact matches (e.g. `.custom(4, 3)`) naturally snap to themselves.
     static func mapAspectRatio(_ aspect: AspectRatio) -> String {
         switch aspect {
         case .square1x1:
@@ -169,8 +200,11 @@ public actor GeminiImageProvider: ImageServiceProtocol {
             return "9:16"
         case .custom(let w, let h):
             guard w > 0, h > 0 else { return "1:1" }
-            let divisor = gcd(w, h)
-            return "\(w / divisor):\(h / divisor)"
+            let ratio = Double(w) / Double(h)
+            let nearest = supportedAspectRatios.min { lhs, rhs in
+                abs(lhs.value - ratio) < abs(rhs.value - ratio)
+            }
+            return nearest?.string ?? "1:1"
         }
     }
 
@@ -187,15 +221,6 @@ public actor GeminiImageProvider: ImageServiceProtocol {
         default:
             return "4K"
         }
-    }
-
-    private static func gcd(_ a: Int, _ b: Int) -> Int {
-        var a = a
-        var b = b
-        while b != 0 {
-            (a, b) = (b, a % b)
-        }
-        return max(a, 1)
     }
 
     // MARK: - Response Parsing

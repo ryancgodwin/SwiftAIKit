@@ -59,8 +59,9 @@ public enum ImagePricing {
     /// Source: https://ai.google.dev/gemini-api/docs/pricing (2026-07-06).
     /// - `gemini-3.1-flash-lite-image` ("Nano Banana 2 Lite"): flat $0.0336 at the 1K bucket
     ///   (no published price ladder across buckets for this model as of the verification date).
-    /// - `gemini-3.1-flash-image` ("Nano Banana 2"): $0.045 (0.5K) / $0.067 (1K) / $0.101 (2K) /
-    ///   $0.151 (4K).
+    /// - `gemini-3.1-flash-image` ("Nano Banana 2"): $0.067 (1K) / $0.101 (2K) / $0.151 (4K).
+    ///   Gemini's pricing page also lists a $0.045 0.5K tier, but it's omitted here — see
+    ///   `geminiSizeBucket(for:)` for why that tier is unreachable through this package.
     /// - `gemini-2.5-flash-image` ("Nano Banana"): flat $0.039 up to 1024x1024.
     private static func geminiPriceUSD(model: String, size: ImageSize) -> Double? {
         let bucket = geminiSizeBucket(for: size)
@@ -69,7 +70,6 @@ public enum ImagePricing {
             return 0.0336
         case "gemini-3.1-flash-image":
             switch bucket {
-            case .half: return 0.045
             case .oneK: return 0.067
             case .twoK: return 0.101
             case .fourK: return 0.151
@@ -81,9 +81,15 @@ public enum ImagePricing {
         }
     }
 
-    /// Gemini's published resolution buckets: 0.5K, 1K, 2K, 4K (longest edge, in pixels).
+    /// Gemini's published resolution buckets, restricted to the ones this package can actually
+    /// reach: 1K, 2K, 4K (longest edge, in pixels).
+    ///
+    /// Gemini's pricing page also documents a 0.5K tier, but `GeminiImageProvider.mapImageSize`
+    /// never requests below `"1K"` on the wire — it has no branch that emits anything smaller.
+    /// Keeping a `.half` case here would be unreachable dead code with no way to verify it's
+    /// even priced correctly, so the bucket floor intentionally follows what the provider
+    /// actually requests: any size below the 1K bucket's threshold still prices at the 1K rate.
     private enum GeminiSizeBucket {
-        case half
         case oneK
         case twoK
         case fourK
@@ -92,9 +98,7 @@ public enum ImagePricing {
     private static func geminiSizeBucket(for size: ImageSize) -> GeminiSizeBucket {
         let longestEdge = max(size.width, size.height)
         switch longestEdge {
-        case ..<768:
-            return .half
-        case 768..<1536:
+        case ..<1536:
             return .oneK
         case 1536..<3072:
             return .twoK
@@ -124,10 +128,17 @@ public enum ImagePricing {
     /// scheduled for shutdown — only `gpt-image-1-mini`, `gpt-image-1.5`, and
     /// `chatgpt-image-latest` are (2026-12-01), migrating to the token-billed `gpt-image-2`.
     ///
-    /// Only `gpt-image-1` is priced here. Newer variants (`gpt-image-1-mini`, `gpt-image-1.5`,
-    /// `gpt-image-2`) are billed per-token rather than a flat per-image figure as of the
-    /// verification date, and are intentionally left out of this table (returns `nil`) rather
-    /// than guessed — add them here once a stable per-image estimate can be verified.
+    /// Only `gpt-image-1` is priced here. Newer variants are intentionally left out of this
+    /// table (returns `nil`) rather than guessed:
+    /// - `gpt-image-1-mini` and `gpt-image-1.5` DO appear with per-image figures on the same
+    ///   legacy pricing table as `gpt-image-1` — the reason they're excluded here is NOT that
+    ///   they're billed differently, but that both are scheduled for shutdown on 2026-12-01
+    ///   (per the deprecations page above), migrating callers to the token-billed `gpt-image-2`.
+    ///   Pricing a model this close to shutdown isn't worth maintaining.
+    /// - `gpt-image-2` itself is billed per-token rather than a flat per-image figure as of the
+    ///   verification date, so it has no per-image number to add here at all.
+    /// Add `gpt-image-1-mini`/`gpt-image-1.5` here only if their shutdown is deferred, or add
+    /// `gpt-image-2` once a stable per-image estimate can be derived from its token pricing.
     private static func openAIPriceUSD(model: String, size: ImageSize) -> Double? {
         guard model == "gpt-image-1" else { return nil }
 

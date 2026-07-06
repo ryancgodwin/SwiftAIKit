@@ -37,6 +37,19 @@ struct ImagePricingTests {
         #expect(price == 0.151)
     }
 
+    @Test("gemini flash-image sub-1K size (below the provider's smallest requestable bucket) prices at the 1K tier")
+    func geminiFlashImageSmallSizeFallsIntoOneKBucket() {
+        // GeminiImageProvider.mapImageSize never requests below "1K" on the wire, so the
+        // pricing bucket floor follows what the provider actually requests — there is no
+        // reachable 0.5K tier.
+        let price = ImagePricing.costEstimateUSD(
+            provider: .geminiNanoBanana,
+            model: "gemini-3.1-flash-image",
+            size: ImageSize(width: 512, height: 512)
+        )
+        #expect(price == 0.067)
+    }
+
     @Test("gpt-image-1 1024x1024 medium-quality price is known")
     func gptImage1Square() {
         let price = ImagePricing.costEstimateUSD(
