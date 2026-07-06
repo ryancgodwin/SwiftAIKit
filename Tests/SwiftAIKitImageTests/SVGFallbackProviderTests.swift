@@ -121,7 +121,7 @@ struct SVGFallbackProviderTests {
         #expect(returnedSVG.contains("<svg"))
         #expect(returnedSVG != malformed1)
         #expect(returnedSVG != malformed2)
-        #expect(SVGFallbackProviderTests.isWellFormedXML(returnedSVG))
+        #expect(SVGFallbackProvider.isValidSVG(returnedSVG))
     }
 
     @Test("costEstimateUSD is 0 and mimeType is image/svg+xml")
@@ -164,7 +164,7 @@ struct SVGFallbackProviderTests {
 
         #expect(await stub.callCount == 2)
         let svg = try #require(String(data: result.data, encoding: .utf8), "expected valid UTF-8")
-        #expect(SVGFallbackProviderTests.isWellFormedXML(svg))
+        #expect(SVGFallbackProvider.isValidSVG(svg))
         #expect(result.mimeType == "image/svg+xml")
         #expect(result.costEstimateUSD == 0)
     }
@@ -184,11 +184,31 @@ struct SVGFallbackProviderTests {
         #expect(returnedSVG == wellFormedSVG)
     }
 
-    // MARK: - Helpers
+    @Test("well-formed non-SVG XML on both attempts returns the bundled template, closure called exactly twice")
+    func wellFormedNonSVGReturnsTemplate() async throws {
+        let nonSVG = "<html><body>hello</body></html>"
+        let stub = StubCompletion([.text(nonSVG), .text(nonSVG)])
+        let provider = SVGFallbackProvider(complete: stub.callAsFunction)
 
-    private static func isWellFormedXML(_ string: String) -> Bool {
-        guard let data = string.data(using: .utf8) else { return false }
-        let parser = XMLParser(data: data)
-        return parser.parse()
+        let result = try await provider.generate(ImageRequest(prompt: "a red circle"))
+
+        #expect(await stub.callCount == 2)
+        let returnedSVG = try #require(String(data: result.data, encoding: .utf8), "expected valid UTF-8")
+        #expect(returnedSVG != nonSVG)
+        #expect(returnedSVG.contains("<svg"))
+        #expect(SVGFallbackProvider.isValidSVG(returnedSVG))
+    }
+
+    @Test("well-formed non-SVG XML on first attempt, valid SVG on repair, returns the repaired SVG")
+    func wellFormedNonSVGThenValidSVGReturnsRepairedSVG() async throws {
+        let nonSVG = "<html><body>hello</body></html>"
+        let stub = StubCompletion([.text(nonSVG), .text(wellFormedSVG)])
+        let provider = SVGFallbackProvider(complete: stub.callAsFunction)
+
+        let result = try await provider.generate(ImageRequest(prompt: "a red circle"))
+
+        #expect(await stub.callCount == 2)
+        let returnedSVG = String(data: result.data, encoding: .utf8)
+        #expect(returnedSVG == wellFormedSVG)
     }
 }

@@ -18,8 +18,10 @@ import SwiftAIKit
 ///    `ImageSize` (via `viewBox`).
 /// 2. Extract the `<svg>...</svg>` slice from the response (models often wrap SVG in markdown
 ///    code fences or add surrounding prose).
-/// 3. Validate well-formedness with `XMLParser` (not `XMLDocument` — this package targets iOS,
-///    where `XMLDocument` does not exist).
+/// 3. Validate that the candidate is actually an SVG document: well-formed XML (via `XMLParser`,
+///    not `XMLDocument` — this package targets iOS, where `XMLDocument` does not exist) *and*
+///    rooted at `<svg`. A well-formed-but-non-SVG response (e.g. a model returning
+///    `<html>...</html>`) is treated as a failed attempt, not a success.
 /// 4. If invalid, retry once: feed the parse failure back to the closure as a repair request.
 /// 5. If the repaired response is still invalid (or the closure throws again), fall back to a
 ///    bundled placeholder SVG template, sized from the request.
@@ -69,7 +71,7 @@ public actor SVGFallbackProvider: ImageServiceProtocol {
             using: complete
         )
 
-        if case .success(let svg) = firstAttempt, Self.isWellFormedXML(svg) {
+        if case .success(let svg) = firstAttempt, Self.isValidSVG(svg) {
             return Self.result(svg: svg)
         }
 
@@ -84,7 +86,7 @@ public actor SVGFallbackProvider: ImageServiceProtocol {
             using: complete
         )
 
-        if case .success(let svg) = secondAttempt, Self.isWellFormedXML(svg) {
+        if case .success(let svg) = secondAttempt, Self.isValidSVG(svg) {
             return Self.result(svg: svg)
         }
 
@@ -115,7 +117,7 @@ public actor SVGFallbackProvider: ImageServiceProtocol {
     private static func failureReason(for attempt: AttemptResult) -> String {
         switch attempt {
         case .success:
-            return "the XML was not well-formed"
+            return "the response was not a well-formed SVG document"
         case .failure(_, let reason):
             return reason
         }
@@ -167,8 +169,8 @@ public actor SVGFallbackProvider: ImageServiceProtocol {
     /// Models frequently wrap SVG in markdown code fences (```svg ... ```) or add prose before
     /// or after the markup. This finds the first `<svg` and the last `</svg>` and returns the
     /// substring between them (inclusive). If either marker is missing, the raw response is
-    /// returned unchanged and will simply fail XML validation, triggering the repair/template
-    /// path.
+    /// returned unchanged and will simply fail `isValidSVG` validation (it won't start with
+    /// `<svg`), triggering the repair/template path.
     static func extractSVG(from raw: String) -> String {
         guard let openRange = raw.range(of: "<svg"),
               let closeRange = raw.range(of: "</svg>", options: .backwards) else {
@@ -182,14 +184,25 @@ public actor SVGFallbackProvider: ImageServiceProtocol {
 
     // MARK: - Validation
 
-    /// Validates well-formedness using `XMLParser`. `XMLDocument` is macOS-only; this package
+    /// Validates that `string` is actually an SVG document: well-formed XML *and* rooted at
+    /// `<svg`.
+    ///
+    /// Well-formedness alone is not sufficient — a model can return well-formed XML that isn't
+    /// SVG at all (e.g. `<html>...</html>`), and `extractSVG(from:)` returns its input unchanged
+    /// when it can't find `<svg`/`</svg>` markers to slice out. Checking the trimmed prefix is a
+    /// cheap, sufficient proxy for "the root element is `<svg>`" given that `extractSVG(from:)`
+    /// already isolates the candidate starting at the first `<svg` when those markers are
+    /// present.
+    ///
+    /// Well-formedness is checked using `XMLParser`. `XMLDocument` is macOS-only; this package
     /// targets iOS 17 + macOS 14, so `XMLParser` (cross-platform) is used instead.
     ///
     /// `XMLParser` is not `Sendable`, so a fresh instance is constructed per call and parsing
     /// stays synchronous within this actor-isolated method — no parser instance crosses an
     /// isolation boundary.
-    static func isWellFormedXML(_ string: String) -> Bool {
-        guard !string.isEmpty, let data = string.data(using: .utf8) else { return false }
+    static func isValidSVG(_ string: String) -> Bool {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("<svg"), let data = trimmed.data(using: .utf8) else { return false }
         let parser = XMLParser(data: data)
         return parser.parse()
     }
