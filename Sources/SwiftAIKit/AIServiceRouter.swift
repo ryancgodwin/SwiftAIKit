@@ -131,17 +131,32 @@ public final class AIServiceRouter {
             )
         } catch let error as AIError where shouldFallback(for: error) {
             // Active provider unavailable — try fallbacks in order.
+            //
+            // A THROWING candidate (e.g. registered but missing credentials, so it throws
+            // `.notConfigured` from `complete()` instead of failing the cheaper `isAvailable`
+            // pre-check) does not abort the walk — fallback-eligible errors from the candidate
+            // itself `continue` to the next one, so a chain still reaches a later viable
+            // provider. Non-eligible errors (`.requestFailed`, `.contentFiltered`, …) still
+            // propagate immediately: they indicate the request is bad/blocked, not that the
+            // provider is unusable, so retrying elsewhere wouldn't help predictably.
+            // (Mirrors ImageServiceRouter's walk — see the SwiftAIKitImage fallback fix.)
+            var lastError: AIError = error
             for fallbackType in fallbackOrder where fallbackType != activeProviderType {
                 guard let fallback = providers[fallbackType],
                       await fallback.isAvailable else { continue }
-                return try await fallback.complete(
-                    messages: messages,
-                    systemPrompt: systemPrompt,
-                    maxTokens: maxTokens
-                )
+                do {
+                    return try await fallback.complete(
+                        messages: messages,
+                        systemPrompt: systemPrompt,
+                        maxTokens: maxTokens
+                    )
+                } catch let fallbackError as AIError where shouldFallback(for: fallbackError) {
+                    lastError = fallbackError
+                    continue
+                }
             }
-            // No fallback succeeded — rethrow the original error.
-            throw error
+            // No fallback succeeded — rethrow the last error encountered.
+            throw lastError
         }
     }
 
