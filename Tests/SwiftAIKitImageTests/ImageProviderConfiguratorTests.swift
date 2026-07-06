@@ -210,7 +210,9 @@ struct ImageProviderConfiguratorTests {
 
         ImageProviderConfigurator.configureGemini(router: router, secretStore: store, config: .default)
 
-        // Provider is registered even without a key (isAvailable is false, but configured).
+        // Provider is registered even without a stored key — the configurator always attaches
+        // a resolver, so isAvailable is true here (see the note atop this suite); actual key
+        // presence is only validated lazily, at request time inside generate().
         #expect(router.registeredProviders.contains(.geminiNanoBanana))
     }
 }

@@ -16,7 +16,10 @@ import SwiftAIKit
 ///     router: router,
 ///     secretStore: KeychainSecretStore(service: "com.myapp"),
 ///     svgFallbackComplete: { prompt, systemPrompt in
-///         try await aiRouter.complete(prompt, systemPrompt: systemPrompt).content
+///         try await aiRouter.complete(
+///             messages: [AIMessage(role: .user, content: prompt)],
+///             systemPrompt: systemPrompt
+///         ).content
 ///     }
 /// )
 /// ```
