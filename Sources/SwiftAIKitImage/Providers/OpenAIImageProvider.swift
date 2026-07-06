@@ -47,9 +47,10 @@ public actor OpenAIImageProvider: ImageServiceProtocol {
         ///   - apiKey: The OpenAI API key.
         ///   - endpoint: The base URL. Defaults to `https://api.openai.com`.
         ///   - model: The model identifier. Defaults to `gpt-image-1`. Verify against
-        ///     https://developers.openai.com/api/reference/resources/images/methods/generate
-        ///     before relying on this default — provider model IDs move fast (newer variants
-        ///     include `gpt-image-1-mini`, `gpt-image-1.5`, `gpt-image-2`).
+        ///     https://developers.openai.com/api/docs/deprecations before relying on this
+        ///     default — provider model IDs move fast (newer variants include
+        ///     `gpt-image-1-mini`, `gpt-image-1.5`, `gpt-image-2`). See
+        ///     `ImageBYOKConfiguration.openAIDefaultModel` for the current deprecation status.
         ///   - organizationID: Optional OpenAI organization ID.
         ///   - apiKeyResolver: Optional lazy resolver, see above.
         public init(
@@ -176,6 +177,12 @@ public actor OpenAIImageProvider: ImageServiceProtocol {
     /// only for `ImagePricing` bucketing. `.custom` aspects map to `auto` in the wire request, so
     /// they're priced as the square tier here — a reasonable default absent a documented price
     /// for `auto`.
+    ///
+    /// - Parameter size: Intentionally unused. OpenAI's `size` wire parameter is derived entirely
+    ///   from `aspect` (see `mapSize(aspect:size:)`), so the requested pixel dimensions have no
+    ///   bearing on which of the three documented tiers (square/portrait/landscape) applies. The
+    ///   parameter is kept (rather than dropped) to mirror `mapSize(aspect:size:)`'s signature and
+    ///   to leave room for future finer-grained tiers.
     static func pricingSize(aspect: AspectRatio, size: ImageSize) -> ImageSize {
         switch aspect {
         case .square1x1, .custom:

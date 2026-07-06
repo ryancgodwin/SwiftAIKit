@@ -167,6 +167,27 @@ struct ImageProviderConfiguratorTests {
         #expect(spy.readCount == 0, "Keychain must not be touched at configure time")
     }
 
+    @Test("configureOpenAIImage(secretStore:) reads the store when generate() is actually invoked")
+    func openAIGenerateReadsStoreAfterConfigure() async {
+        let router = ImageServiceRouter(
+            defaultProvider: .openAIImage,
+            defaultsKey: "test_img_lazy_4_\(UUID().uuidString)"
+        )
+        let spy = SpyImageSecretStore()
+        // Deliberately no key stored: generate() should still invoke the resolver (proving it
+        // fires), then fail fast with `.notConfigured` before any network I/O — offline and
+        // deterministic.
+        ImageProviderConfigurator.configureOpenAIImage(router: router, secretStore: spy, config: .default)
+
+        #expect(spy.readCount == 0, "sanity check: unread before generate() is called")
+
+        await #expect(throws: AIError.self) {
+            _ = try await router.generate(ImageRequest(prompt: "a red panda"))
+        }
+
+        #expect(spy.readCount > 0, "generate() must invoke the resolver, proving it is wired up")
+    }
+
     @Test("isProviderAvailable does not read the store (resolver is not invoked by isAvailable)")
     func isAvailableDoesNotReadStore() async {
         let router = ImageServiceRouter(defaultProvider: .geminiNanoBanana, defaultsKey: "test_img_lazy_3")

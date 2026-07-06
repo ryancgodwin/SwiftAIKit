@@ -15,9 +15,13 @@ import Foundation
 /// Figures verified 2026-07-06 against:
 /// - Gemini: https://ai.google.dev/gemini-api/docs/pricing (standard tier, per-image, by
 ///   resolution bucket)
-/// - OpenAI: https://developers.openai.com/api/docs/pricing and
-///   https://developers.openai.com/api/reference/resources/images/methods/generate (per-image,
-///   by quality tier and size)
+/// - OpenAI: https://developers.openai.com/api/docs/guides/image-generation, under the
+///   "Models prior to `gpt-image-2`" legacy pricing table (per-image, by quality tier and size).
+///   NOTE: as of the verification date, `https://developers.openai.com/api/docs/pricing` no
+///   longer lists `gpt-image-1` at all — it only shows token-based pricing for `gpt-image-2`,
+///   `gpt-image-1.5`, and `gpt-image-1-mini`. The images/generate API reference page has no
+///   pricing data. The legacy per-image table on the image-generation guide page is the only
+///   official source that still documents `gpt-image-1`'s per-image figures.
 public enum ImagePricing {
 
     // MARK: - Public API
@@ -109,12 +113,16 @@ public enum ImagePricing {
     /// representative estimate — not a guarantee of the exact charge. Verify against the
     /// provider's billing dashboard for exact costs.
     ///
-    /// Source: https://developers.openai.com/api/docs/pricing and
-    /// https://developers.openai.com/api/reference/resources/images/methods/generate
-    /// (2026-07-06):
+    /// Source: https://developers.openai.com/api/docs/guides/image-generation — the "Models
+    /// prior to `gpt-image-2`" legacy pricing table (2026-07-06):
     /// - 1024x1024 (square): low $0.011 / medium $0.042 / high $0.167
     /// - 1024x1536 (portrait): low $0.016 / medium $0.063 / high $0.25
     /// - 1536x1024 (landscape): low $0.016 / medium $0.063 / high $0.25
+    ///
+    /// `gpt-image-1` itself does NOT appear on OpenAI's deprecations page
+    /// (https://developers.openai.com/api/docs/deprecations, checked 2026-07-06) and is not
+    /// scheduled for shutdown — only `gpt-image-1-mini`, `gpt-image-1.5`, and
+    /// `chatgpt-image-latest` are (2026-12-01), migrating to the token-billed `gpt-image-2`.
     ///
     /// Only `gpt-image-1` is priced here. Newer variants (`gpt-image-1-mini`, `gpt-image-1.5`,
     /// `gpt-image-2`) are billed per-token rather than a flat per-image figure as of the

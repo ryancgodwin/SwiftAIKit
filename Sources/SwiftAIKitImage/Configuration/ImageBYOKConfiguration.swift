@@ -45,12 +45,14 @@ public struct ImageBYOKConfiguration: Sendable {
 
     /// Model used for OpenAI image generation when no override is stored.
     ///
-    /// Verify against
-    /// https://developers.openai.com/api/reference/resources/images/methods/generate before
-    /// relying on this default — provider model IDs move fast (newer variants include
-    /// `gpt-image-1-mini`, `gpt-image-1.5`, `gpt-image-2`; `gpt-image-1` itself is slated for
-    /// deprecation on 2026-10-23 per OpenAI's model page). Centralized here (rather than
-    /// hardcoded in `OpenAIImageProvider.Configuration`) so it is changed in exactly one place.
+    /// Verify against https://developers.openai.com/api/docs/deprecations before relying on this
+    /// default — provider model IDs move fast. As of 2026-07-06, `gpt-image-1` itself does NOT
+    /// appear on OpenAI's deprecations page and is not scheduled for shutdown; only the newer
+    /// `gpt-image-1-mini` and `gpt-image-1.5` variants are (2026-12-01), migrating to the
+    /// token-billed `gpt-image-2`. `gpt-image-1` remains the mainline per-image-billed model and
+    /// is kept as the default here. Re-check the deprecations page periodically, since OpenAI's
+    /// model lineup moves fast. Centralized here (rather than hardcoded in
+    /// `OpenAIImageProvider.Configuration`) so it is changed in exactly one place.
     public let openAIDefaultModel: String
 
     public init(
