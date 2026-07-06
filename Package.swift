@@ -17,6 +17,10 @@ let package = Package(
             name: "SwiftAIKitUI",
             targets: ["SwiftAIKitUI"]
         ),
+        .library(
+            name: "SwiftAIKitImage",
+            targets: ["SwiftAIKitImage"]
+        ),
     ],
     targets: [
         .target(
@@ -43,6 +47,19 @@ let package = Package(
             name: "SwiftAIKitUITests",
             dependencies: ["SwiftAIKitUI"],
             path: "Tests/SwiftAIKitUITests"
+        ),
+        .target(
+            name: "SwiftAIKitImage",
+            dependencies: ["SwiftAIKit"],
+            path: "Sources/SwiftAIKitImage",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+        .testTarget(
+            name: "SwiftAIKitImageTests",
+            dependencies: ["SwiftAIKitImage"],
+            path: "Tests/SwiftAIKitImageTests"
         ),
     ]
 )

@@ -27,6 +27,25 @@ Sources/SwiftAIKit/
     └── ProviderConfigurator.swift       # Convenience factory for UserDefaults-based setup
 ```
 
+```
+Sources/SwiftAIKitImage/
+├── ImageServiceProtocol.swift           # Core protocol all image providers implement (Actor)
+├── ImageServiceRouter.swift             # @Observable router — main entry point for image requests
+├── Models/
+│   ├── ImageProviderType.swift          # Extensible RawRepresentable provider-type identifier
+│   ├── ImageRequest.swift               # Request struct (prompt, aspect, size, purpose, reference images)
+│   └── ImageResult.swift                # Result struct (data, mimeType, provider, model, cost estimate)
+├── Providers/
+│   ├── GeminiImageProvider.swift        # Gemini `generateContent` image endpoint (actor)
+│   ├── OpenAIImageProvider.swift        # OpenAI `/v1/images/generations` endpoint (actor)
+│   └── SVGFallbackProvider.swift        # Dependency-free SVG fallback (injected text closure)
+├── Configuration/
+│   ├── ImageBYOKConfiguration.swift     # Keychain accounts, UserDefaults keys, default models/endpoints
+│   └── ImageProviderConfigurator.swift  # Convenience factory wiring SecretStore + UserDefaults into providers
+└── Pricing/
+    └── ImagePricing.swift               # Per-image USD cost lookup table, keyed by provider/model/size
+```
+
 ### Core Workflow
 
 1. **App creates an `AIServiceRouter`** — the main entry point
@@ -110,9 +129,106 @@ struct MyApp: App {
 }
 ```
 
+### Consuming images
+
+`SwiftAIKitImage` is a separate library target (depends on `SwiftAIKit`, still zero external
+dependencies) providing the same protocol/router/configurator shape as the core package, but for
+image generation instead of text completion.
+
+```swift
+import SwiftAIKit
+import SwiftAIKitImage
+
+let aiRouter = AIServiceRouter(defaultProvider: .anthropic)
+let imageRouter = ImageServiceRouter()
+let secretStore = KeychainSecretStore(service: "com.myapp")
+
+ImageProviderConfigurator.configureAll(
+    router: imageRouter,
+    secretStore: secretStore,
+    svgFallbackComplete: { prompt, systemPrompt in
+        try await aiRouter.complete(
+            messages: [AIMessage(role: .user, content: prompt)],
+            systemPrompt: systemPrompt
+        ).content
+    }
+)
+
+imageRouter.fallbackOrder = [.geminiNanoBanana, .svgFallback]
+
+let result = try await imageRouter.generate(.init(prompt: "a red panda in a garden"))
+// result.data / result.mimeType / result.provider / result.model / result.costEstimateUSD
+```
+
+`ImageProviderConfigurator.configureAll` wires all three providers (Gemini, OpenAI image, SVG
+fallback) at once. To wire just one provider (e.g. only Gemini, skipping OpenAI), call
+`ImageProviderConfigurator.configureGemini(router:secretStore:config:session:)` directly and
+register `SVGFallbackProvider(complete:)` yourself:
+
+```swift
+ImageProviderConfigurator.configureGemini(router: imageRouter, secretStore: secretStore)
+imageRouter.configure(.svgFallback, with: SVGFallbackProvider(complete: { prompt, systemPrompt in
+    try await aiRouter.complete(
+        messages: [AIMessage(role: .user, content: prompt)],
+        systemPrompt: systemPrompt
+    ).content
+}))
+```
+
+The SVG fallback never touches `SwiftAIKit` directly — it takes an injected `@Sendable` text
+closure so `SwiftAIKitImage` stays decoupled from any particular text provider. The closure is
+typically a thin shim over `AIServiceRouter.complete(...).content`, as above. Because
+`SVGFallbackProvider.isAvailable` is unconditionally `true`, it's meant to sit last in
+`fallbackOrder` — the guaranteed-success end of the chain.
+
+### Verify-at-build caveats (image target)
+
+- **Model IDs and prices move fast.** Don't trust defaults baked into this doc or the source
+  without re-checking the provider's docs at build time.
+- **Centralized in one place each**: default model IDs and endpoints live in
+  `ImageBYOKConfiguration` (`geminiDefaultModel`, `openAIDefaultModel`, etc.) and mirrored in each
+  provider's `Configuration` initializer default; per-image USD estimates live in `ImagePricing`.
+  Update both the `ImageBYOKConfiguration` default and the provider's `Configuration` default
+  together if a model ID changes.
+- **Gemini uses the `generateContent` surface**, not the newer Interactions API — see
+  `GeminiImageProvider`'s doc comment for the exact REST reference pages checked. Re-verify
+  request/response shapes against `https://ai.google.dev/api/generate-content` and the live
+  Discovery document if Google ships an Interactions-API-based image path later.
+- **`gpt-image-1` pricing is cited from OpenAI's legacy per-image table** (`ImagePricing`'s doc
+  comment), because `gpt-image-1` no longer appears on OpenAI's token-based pricing page at all —
+  only the newer `gpt-image-2`/`gpt-image-1.5`/`gpt-image-1-mini` variants do. If OpenAI removes
+  the legacy table or migrates `gpt-image-1` itself to token billing, `ImagePricing`'s
+  `openAIPriceUSD` needs a rewrite, not just a number change.
+
+### Extensibility: app-defined providers
+
+Unlike `AIProviderType` (a closed enum), `ImageProviderType` is a `RawRepresentable` struct. Apps
+can define their own provider types and register a conforming actor on the router without any
+changes to this package:
+
+```swift
+extension ImageProviderType {
+    static let paperBanana = ImageProviderType(rawValue: "paperBanana")
+}
+
+actor PaperBananaProvider: ImageServiceProtocol {
+    let providerType: ImageProviderType = .paperBanana
+    var isAvailable: Bool { /* ... */ true }
+    func generate(_ request: ImageRequest) async throws -> ImageResult { /* ... */ }
+}
+
+imageRouter.configure(.paperBanana, with: PaperBananaProvider())
+```
+
+This is how the app-level PaperBanana adapter (a Python subprocess/MCP bridge, out of scope for
+this package) plugs in — it just conforms to `ImageServiceProtocol` and registers itself.
+
 ## Important Notes
 
 - **FoundationModels requires macOS 26+ / iOS 26+** — the on-device provider uses `#if canImport` and `@available` guards to compile on earlier targets
 - **API keys** are read from UserDefaults by `ProviderConfigurator`, but apps can also construct providers directly with explicit keys
 - **The package never logs or transmits API keys** except to the configured endpoint
 - **OpenAI provider works with any compatible endpoint** — Ollama, LM Studio, vLLM, Together AI, Groq, etc. Local endpoints don't require an API key.
+- **`SwiftAIKitImage` has no SwiftUI import and no external dependencies** — same zero-dependency philosophy as the core target, just for image generation instead of text
+- **`SwiftAIKitImage` API keys are also read lazily** — `ImageProviderConfigurator` hands each provider an `apiKeyResolver` closure over a `SecretStore`; the Keychain is read at request time, never at configure time
+- **`SwiftAIKitImage` never logs secrets or image bytes**
