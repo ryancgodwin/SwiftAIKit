@@ -96,7 +96,8 @@ struct OpenAIResponseParsingTests {
         #expect(result.data == Data(base64Encoded: "aGVsbG8gd29ybGQ=")!)
         #expect(result.provider == .openAIImage)
         #expect(result.model == "gpt-image-1")
-        #expect(result.costEstimateUSD == nil)
+        // Default requestedSize (1024x1024, square) prices at the medium-quality tier.
+        #expect(result.costEstimateUSD == 0.042)
     }
 
     // MARK: - Error mapping (status-code driven)

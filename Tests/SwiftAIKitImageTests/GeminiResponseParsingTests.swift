@@ -97,7 +97,8 @@ struct GeminiResponseParsingTests {
         #expect(result.data == Data(base64Encoded: "aGVsbG8gd29ybGQ=")!)
         #expect(result.provider == .geminiNanoBanana)
         #expect(result.model == "gemini-3.1-flash-image")
-        #expect(result.costEstimateUSD == nil)
+        // Default requestedSize (1024x1024) buckets to Gemini's 1K tier for this model.
+        #expect(result.costEstimateUSD == 0.067)
     }
 
     // MARK: - Error envelope

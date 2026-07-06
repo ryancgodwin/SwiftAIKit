@@ -116,7 +116,7 @@ public actor GeminiImageProvider: ImageServiceProtocol {
             throw AIError.requestFailed(message)
         }
 
-        return try Self.parseGenerateContentResponse(data, model: configuration.model)
+        return try Self.parseGenerateContentResponse(data, model: configuration.model, requestedSize: request.size)
     }
 
     // MARK: - Wire Mapping
@@ -206,7 +206,17 @@ public actor GeminiImageProvider: ImageServiceProtocol {
     ///
     /// Exposed at `internal` visibility so it can be tested directly against fixture JSON
     /// without a network round-trip (see `GeminiResponseParsingTests`).
-    static func parseGenerateContentResponse(_ data: Data, model: String) throws -> ImageResult {
+    ///
+    /// - Parameter requestedSize: The pixel size requested by the caller, used only for
+    ///   `ImagePricing` bucketing (the response body doesn't report actual output dimensions,
+    ///   and Gemini's `imageConfig.imageSize` already constrained generation to the bucket
+    ///   derived from this same value — see `mapImageSize(_:)`). Defaults to a value bucketing
+    ///   to Gemini's 1K tier, so existing callers/tests that don't pass a size still parse.
+    static func parseGenerateContentResponse(
+        _ data: Data,
+        model: String,
+        requestedSize: ImageSize = ImageSize(width: 1024, height: 1024)
+    ) throws -> ImageResult {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw AIError.invalidResponse("Gemini response was not valid JSON.")
         }
@@ -244,7 +254,12 @@ public actor GeminiImageProvider: ImageServiceProtocol {
                     data: imageData,
                     mimeType: mimeType,
                     provider: .geminiNanoBanana,
-                    model: model
+                    model: model,
+                    costEstimateUSD: ImagePricing.costEstimateUSD(
+                        provider: .geminiNanoBanana,
+                        model: model,
+                        size: requestedSize
+                    )
                 )
             }
         }

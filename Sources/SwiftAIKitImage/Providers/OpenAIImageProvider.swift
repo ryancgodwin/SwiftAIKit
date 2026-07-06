@@ -131,7 +131,11 @@ public actor OpenAIImageProvider: ImageServiceProtocol {
             throw AIError.requestFailed(message)
         }
 
-        return try Self.parseImagesResponse(data, model: configuration.model)
+        return try Self.parseImagesResponse(
+            data,
+            model: configuration.model,
+            requestedSize: Self.pricingSize(aspect: request.aspect, size: request.size)
+        )
     }
 
     // MARK: - Wire Mapping
@@ -168,6 +172,21 @@ public actor OpenAIImageProvider: ImageServiceProtocol {
         }
     }
 
+    /// The actual pixel dimensions requested from OpenAI (mirrors `mapSize(aspect:size:)`), used
+    /// only for `ImagePricing` bucketing. `.custom` aspects map to `auto` in the wire request, so
+    /// they're priced as the square tier here — a reasonable default absent a documented price
+    /// for `auto`.
+    static func pricingSize(aspect: AspectRatio, size: ImageSize) -> ImageSize {
+        switch aspect {
+        case .square1x1, .custom:
+            return ImageSize(width: 1024, height: 1024)
+        case .wide16x9:
+            return ImageSize(width: 1536, height: 1024)
+        case .portrait9x16:
+            return ImageSize(width: 1024, height: 1536)
+        }
+    }
+
     // MARK: - Response Parsing
 
     /// Parses a `/v1/images/generations` 200-OK response body into an `ImageResult`, or throws
@@ -175,7 +194,16 @@ public actor OpenAIImageProvider: ImageServiceProtocol {
     ///
     /// Exposed at `internal` visibility so it can be tested directly against fixture JSON
     /// without a network round-trip (see `OpenAIResponseParsingTests`).
-    static func parseImagesResponse(_ data: Data, model: String) throws -> ImageResult {
+    ///
+    /// - Parameter requestedSize: The pixel size requested by the caller, used only for
+    ///   `ImagePricing` bucketing (the response body doesn't report output dimensions). Defaults
+    ///   to the square 1024x1024 tier, so existing callers/tests that don't pass a size still
+    ///   parse.
+    static func parseImagesResponse(
+        _ data: Data,
+        model: String,
+        requestedSize: ImageSize = ImageSize(width: 1024, height: 1024)
+    ) throws -> ImageResult {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let dataArray = json["data"] as? [[String: Any]],
               let firstImage = dataArray.first,
@@ -191,7 +219,12 @@ public actor OpenAIImageProvider: ImageServiceProtocol {
             data: imageData,
             mimeType: mimeType,
             provider: .openAIImage,
-            model: model
+            model: model,
+            costEstimateUSD: ImagePricing.costEstimateUSD(
+                provider: .openAIImage,
+                model: model,
+                size: requestedSize
+            )
         )
     }
 
