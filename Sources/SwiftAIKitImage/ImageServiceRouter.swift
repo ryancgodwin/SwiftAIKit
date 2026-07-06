@@ -116,19 +116,19 @@ public final class ImageServiceRouter {
         } catch let error as AIError where shouldFallback(for: error) {
             // Active provider unavailable — try fallbacks in order.
             //
-            // NOTE: this intentionally diverges from `AIServiceRouter`'s (core, text-completion)
-            // fallback walk, which aborts the whole chain the instant any candidate's
-            // `generate()`/`complete()` throws. Here, a THROWING candidate (e.g. registered but
-            // missing credentials, so it throws `.notConfigured` instead of failing the cheaper
-            // `isAvailable` pre-check) does not abort the walk — we catch fallback-eligible
-            // errors from `generate()` itself and `continue` to the next candidate, so a chain
-            // like `[.geminiNanoBanana, .openAIImage, .svgFallback]` still reaches
-            // `.svgFallback` even if `.openAIImage` is registered-but-unconfigured. This matches
-            // the image router's "guarantee a result" intent (the chain typically terminates in
-            // `SVGFallbackProvider`, which is unconditionally available). Non-eligible errors
-            // (e.g. `.requestFailed`, `.contentFiltered`) still propagate immediately — those
-            // indicate the request itself is bad/blocked, not that the provider is unusable, so
-            // retrying against a different provider wouldn't help predictably.
+            // NOTE: a THROWING candidate (e.g. registered but missing credentials, so it throws
+            // `.notConfigured` instead of failing the cheaper `isAvailable` pre-check) does not
+            // abort the walk — we catch fallback-eligible errors from `generate()` itself and
+            // `continue` to the next candidate, so a chain like
+            // `[.geminiNanoBanana, .openAIImage, .svgFallback]` still reaches `.svgFallback`
+            // even if `.openAIImage` is registered-but-unconfigured. This matches the image
+            // router's "guarantee a result" intent (the chain typically terminates in
+            // `SVGFallbackProvider`, which is unconditionally available), and mirrors
+            // `AIServiceRouter`'s (core, text-completion) fallback walk, which adopted the same
+            // semantics. Non-eligible errors (e.g. `.requestFailed`, `.contentFiltered`) still
+            // propagate immediately — those indicate the request itself is bad/blocked, not that
+            // the provider is unusable, so retrying against a different provider wouldn't help
+            // predictably.
             var lastError: AIError = error
             for fallbackType in fallbackOrder where fallbackType != activeProviderType {
                 guard let fallback = providers[fallbackType],
